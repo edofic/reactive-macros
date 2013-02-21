@@ -1,6 +1,8 @@
 package com.edofic.reactivemacros
 
-import reactivemongo.bson.{BSONInteger, BSONString, BSONValue}
+import reactivemongo.bson._
+import language.experimental.macros
+import reactivemongo.bson.handlers.BSONReader
 
 
 /**
@@ -13,6 +15,10 @@ trait ReadBSON[A]{
 }
 
 object ReadBSON{
+
+  def apply[A]: BSONReader[A] = macro MacroImpl.read[A]
+
+
   implicit val stringReader = new ReadBSON[String] {
     def read(value: BSONValue): String = value.asInstanceOf[BSONString].value
   }
