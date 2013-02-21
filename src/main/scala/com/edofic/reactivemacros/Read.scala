@@ -23,7 +23,7 @@ object Read {
       case s => s.asMethod
     }
 
-    val readerType = typeOf[Reader[_]].typeConstructor
+    val readerType = typeOf[ReadBSON[_]].typeConstructor
 
     val values = constructor.paramss.head map { param =>
       val typ = appliedType(readerType, List(param.typeSignature))
