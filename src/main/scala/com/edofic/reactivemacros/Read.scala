@@ -43,14 +43,6 @@ object Read {
   }
 }
 
-trait Reader[A]{
-  def read(a: Any): A
-}
 
-object Reader{
-  def cast[A] = new Reader[A]{
-    def read(a: Any): A = a.asInstanceOf[A]
-  }
-}
 
 
