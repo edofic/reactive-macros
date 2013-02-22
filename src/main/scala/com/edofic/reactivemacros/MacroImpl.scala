@@ -52,7 +52,7 @@ private object MacroImpl {
         val optParam = optionTypeParameter(c)(sig)
         val typ = appliedType(readerType(c), List(optParam getOrElse sig))
         val reader = c.inferImplicitValue(typ)
-        if (reader.isEmpty) c.abort(c.enclosingPosition, s"Implicit $typ '$param' not found")
+        if (reader.isEmpty) c.abort(c.enclosingPosition, s"Implicit $typ for '$param' not found")
 
         val arg = Apply(Select(Ident(newTermName("map")), "apply"), List(Literal(Constant(param.name.toString))))
         val readExp = c.Expr[Nothing](Apply(Select(reader, "read"), List(arg)))
@@ -102,6 +102,7 @@ private object MacroImpl {
       case ((param, i), typ) => {
         val neededType = appliedType(writerType(c), List(typ))
         val writer = c.inferImplicitValue(neededType)
+        if (writer.isEmpty) c.abort(c.enclosingPosition, s"Implicit $typ for '$param' not found")
         val tuple_i = Select(tuple, "_" + (i + 1))
         val bs_value = c.Expr[BSONValue](Apply(Select(writer, "write"), List(tuple_i)))
         val name = c.literal(param.name.toString)
