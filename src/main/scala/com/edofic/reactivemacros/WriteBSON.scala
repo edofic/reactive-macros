@@ -17,12 +17,28 @@ trait WriteBSONimplicits {
     def write(value: A): BSONValue = writer.toBSON(value)
   }
 
+  implicit val doubleWriter = new WriteBSON[Double] {
+    def write(value: Double): BSONValue = BSONDouble(value)
+  }
+
   implicit val stringWriter = new WriteBSON[String] {
     def write(value: String): BSONValue = BSONString(value)
   }
 
+  implicit val booleanWriter = new WriteBSON[Boolean] {
+    def write(value: Boolean): BSONValue = BSONBoolean(value)
+  }
+
   implicit val intWriter = new WriteBSON[Int] {
     def write(value: Int): BSONValue = BSONInteger(value)
+  }
+
+  implicit val longWriter = new WriteBSON[Long] {
+    def write(value: Long): BSONValue = BSONLong(value)
+  }
+
+  implicit def seqWriter[A](implicit aWriter: WriteBSON[A]) = new WriteBSON[Seq[A]] {
+    def write(value: Seq[A]): BSONValue = BSONArray((value map aWriter.write): _*)
   }
 }
 
