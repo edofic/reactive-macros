@@ -11,43 +11,59 @@ import reactivemongo.bson.{BSONValue, BSONDocument}
  */
 private object MacroImpl {
   def read[A: c.WeakTypeTag](c: Context): c.Expr[BSONReader[A]] = {
-    import c.universe._
+    val body = readBody(c)
 
-    val constructor = applyMethod[A](c)
-
-    val values = constructor.paramss.head map { param =>
-      val typ = appliedType(readerType(c), List(param.typeSignature))
-      val reader = c.inferImplicitValue(typ)
-      if(reader.isEmpty) c.abort(c.enclosingPosition, s"Implicit Reader for parameter '$param' not found")
-
-      val arg = Apply(Select(Ident(newTermName("map")), "apply"), List(Literal(Constant(param.name.toString))))
-      Apply(Select(reader, "read"), List(arg))
-    }
-
-    val constructorTree = c.parse(constructor.fullName)
-    val creator = c.Expr[A](Apply(constructorTree, values))
-    c.echo(c.enclosingPosition,"Generated code\n"+show(creator.tree))
-
-    reify {
+    c.universe.reify {
       new BSONReader[A] {
-        def fromBSON(doc: BSONDocument): A = {
-          val map = doc.mapped
-          creator.splice
-        }
+        def fromBSON(document: BSONDocument): A = body.splice
       }
     }
   }
 
   def write[A: c.WeakTypeTag](c: Context): c.Expr[BSONWriter[A]] = {
+    val body = writeBody(c)
+    c.universe.reify (
+      new BSONWriter[A] {
+        def toBSON(document: A): BSONDocument = body.splice
+      }
+    )
+  }
+
+  def readBody[A: c.WeakTypeTag](c: Context): c.Expr[A] = {
+    import c.universe._
+
+    val constructor = applyMethod[A](c)
+
+    val values = constructor.paramss.head map {
+      param =>
+        val typ = appliedType(readerType(c), List(param.typeSignature))
+        val reader = c.inferImplicitValue(typ)
+        if (reader.isEmpty) c.abort(c.enclosingPosition, s"Implicit Reader for parameter '$param' not found")
+
+        val arg = Apply(Select(Ident(newTermName("map")), "apply"), List(Literal(Constant(param.name.toString))))
+        Apply(Select(reader, "read"), List(arg))
+    }
+
+    val constructorTree = c.parse(constructor.fullName)
+
+    c.Expr[A](
+      Block(
+        ValDef(Modifiers(), newTermName("map"), TypeTree(), Select(Ident("document"), "mapped")),
+        Apply(constructorTree, values)
+      )
+    )
+  }
+
+  def writeBody[A: c.WeakTypeTag](c: Context): c.Expr[BSONDocument] = {
     import c.universe._
 
     val deconstructor = unapplyMethod[A](c)
 
     val types = {
       deconstructor.returnType match {
-        case TypeRef(_,_, args) =>
+        case TypeRef(_, _, args) =>
           args.head match {
-            case t @ TypeRef(_, _, Nil) => Some(List(t))
+            case t@TypeRef(_, _, Nil) => Some(List(t))
             case TypeRef(_, _, args) => Some(args)
             case _ => None
           }
@@ -61,13 +77,13 @@ private object MacroImpl {
 
     val tuple = Ident(newTermName("tuple"))
     val values = constructorParams.zipWithIndex zip types map {
-      case ((param,i), typ) => {
+      case ((param, i), typ) => {
         val neededType = appliedType(writerType(c), List(typ))
         val writer = c.inferImplicitValue(neededType)
         val tuple_i = Select(tuple, "_" + (i + 1))
         val bs_value = c.Expr[BSONValue](Apply(Select(writer, "write"), List(tuple_i)))
         val name = c.literal(param.name.toString)
-        reify (
+        reify(
           (name.splice, bs_value.splice)
         ).tree
       }
@@ -76,23 +92,13 @@ private object MacroImpl {
     val companionTree = c.parse(companion[A](c).fullName)
     val document = Ident(newTermName("document"))
     val invokeUnapply = Select(Apply(Select(companionTree, "unapply"), List(document)), "get")
-    val block = c.Expr[BSONDocument](
+    c.Expr[BSONDocument](
       Block(
         ValDef(Modifiers(), newTermName("tuple"), TypeTree(), invokeUnapply),
         Apply(bsonDocPath(c), values)
       )
     )
-
-    val result = reify{
-      new BSONWriter[A] {
-        def toBSON(document: A): BSONDocument = block.splice
-      }
-    }
-
-    c.echo(c.enclosingPosition, show(result))
-    result
   }
-
 
   private def bsonDocPath(c: Context): c.universe.Select = {
     import c.universe._

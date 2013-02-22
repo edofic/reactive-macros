@@ -12,10 +12,7 @@ trait WriteBSON[A]{
   def write(value: A): BSONValue
 }
 
-object WriteBSON {
-
-  def apply[A]: BSONWriter[A] = macro MacroImpl.write[A]
-
+trait WriteBSONimplicits {
   implicit val stringWriter = new WriteBSON[String] {
     def write(value: String): BSONValue = BSONString(value)
   }
@@ -23,4 +20,8 @@ object WriteBSON {
   implicit val intWriter = new WriteBSON[Int] {
     def write(value: Int): BSONValue = BSONInteger(value)
   }
+}
+
+object WriteBSON extends WriteBSONimplicits {
+  def apply[A]: BSONWriter[A] = macro MacroImpl.write[A]
 }

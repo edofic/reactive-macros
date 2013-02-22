@@ -14,11 +14,7 @@ trait ReadBSON[A]{
   def read(value: BSONValue): A
 }
 
-object ReadBSON{
-
-  def apply[A]: BSONReader[A] = macro MacroImpl.read[A]
-
-
+trait ReadBSONimplicits {
   implicit val stringReader = new ReadBSON[String] {
     def read(value: BSONValue): String = value.asInstanceOf[BSONString].value
   }
@@ -26,4 +22,8 @@ object ReadBSON{
   implicit val intReader = new ReadBSON[Int] {
     def read(value: BSONValue): Int = value.asInstanceOf[BSONInteger].value
   }
+}
+
+object ReadBSON extends ReadBSONimplicits {
+  def apply[A]: BSONReader[A] = macro MacroImpl.read[A]
 }
