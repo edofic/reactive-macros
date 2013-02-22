@@ -29,7 +29,19 @@ private object MacroImpl {
     )
   }
 
-  def readBody[A: c.WeakTypeTag](c: Context): c.Expr[A] = {
+  def format[A: c.WeakTypeTag](c: Context): c.Expr[BSONReader[A] with BSONWriter[A]] = {
+    val r = readBody[A](c)
+    val w = writeBody[A](c)
+    c.universe.reify(
+      new BSONReader[A] with BSONWriter[A] {
+        def fromBSON(document: BSONDocument): A = r.splice
+
+        def toBSON(document: A): BSONDocument = w.splice
+      }
+    )
+  }
+
+  private def readBody[A: c.WeakTypeTag](c: Context): c.Expr[A] = {
     import c.universe._
 
     val constructor = applyMethod[A](c)
@@ -54,7 +66,7 @@ private object MacroImpl {
     )
   }
 
-  def writeBody[A: c.WeakTypeTag](c: Context): c.Expr[BSONDocument] = {
+  private def writeBody[A: c.WeakTypeTag](c: Context): c.Expr[BSONDocument] = {
     import c.universe._
 
     val deconstructor = unapplyMethod[A](c)
