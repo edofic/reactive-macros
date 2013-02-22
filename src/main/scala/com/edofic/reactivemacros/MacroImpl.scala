@@ -3,6 +3,7 @@ package com.edofic.reactivemacros
 import reflect.macros.Context
 import reactivemongo.bson.handlers.{BSONWriter, BSONReader}
 import reactivemongo.bson.{BSONValue, BSONDocument}
+import collection.mutable.ListBuffer
 
 /**
  * User: andraz
@@ -57,12 +58,12 @@ private object MacroImpl {
         val arg = Apply(Select(Ident(newTermName("map")), "apply"), List(Literal(Constant(param.name.toString))))
         val readExp = c.Expr[Nothing](Apply(Select(reader, "read"), List(arg)))
         val exp = if (optParam.isDefined) reify(
-            try{
-              Some(readExp.splice)
-            } catch {
-              case _: Exception => None
-            }
-          ) else readExp
+          try{
+            Some(readExp.splice)
+          } catch {
+            case _: Exception => None
+          }
+        ) else readExp
         exp.tree
     }
 
@@ -98,7 +99,8 @@ private object MacroImpl {
     if (constructorParams.length != types.length) c.abort(c.enclosingPosition, "apply/unapply don't match")
 
     val tuple = Ident(newTermName("tuple"))
-    val values = constructorParams.zipWithIndex zip types map {
+    val (optional, required) = constructorParams.zipWithIndex zip types partition (t=>isOptionalType(c)(t._2))
+    val values = required map {
       case ((param, i), typ) => {
         val neededType = appliedType(writerType(c), List(typ))
         val writer = c.inferImplicitValue(neededType)
@@ -112,27 +114,57 @@ private object MacroImpl {
       }
     }
 
+    val appends = optional map {
+      case ((param, i), optType) => {
+        val typ = optionTypeParameter(c)(optType).get
+        val neededType = appliedType(writerType(c), List(typ))
+        val writer = c.inferImplicitValue(neededType)
+        if (writer.isEmpty) c.abort(c.enclosingPosition, s"Implicit $typ for '$param' not found")
+        val tuple_i = c.Expr[Option[Any]](Select(tuple, "_" + (i + 1)))
+        val buf = c.Expr[ListBuffer[(String,BSONValue)]](Ident("buf"))
+        val bs_value = c.Expr[BSONValue](Apply(Select(writer, "write"), List(Select(tuple_i.tree, "get"))))
+        val name = c.literal(param.name.toString)
+        reify{
+          if(tuple_i.splice.isDefined) buf.splice.append((name.splice, bs_value.splice))
+        }.tree
+      }
+    }
+
     val companionTree = c.parse(companion[A](c).fullName)
     val document = Ident(newTermName("document"))
     val invokeUnapply = Select(Apply(Select(companionTree, "unapply"), List(document)), "get")
+    val tupleDef = ValDef(Modifiers(), newTermName("tuple"), TypeTree(), invokeUnapply)
+    val mkBSONdoc = Apply(bsonDocPath(c), values)
+
+
     c.Expr[BSONDocument](
-      Block(
-        ValDef(Modifiers(), newTermName("tuple"), TypeTree(), invokeUnapply),
-        Apply(bsonDocPath(c), values)
-      )
+      if(optional.length>0)
+        Block(
+          List(
+            tupleDef,
+            ValDef(Modifiers(), newTermName("bson"), TypeTree(), mkBSONdoc),
+            c.parse("val buf = scala.collection.mutable.ListBuffer[(String,reactivemongo.bson.BSONValue)]()")
+          ) ++ appends,
+          c.parse("bson.append(buf: _*)")
+        )
+      else
+        Block(tupleDef, mkBSONdoc)
     )
   }
 
   //Some(A) for Option[A] else None
   private def optionTypeParameter(c: Context)(typ: c.universe.Type): Option[c.universe.Type] = {
     import c.universe._
-    val optType = c.typeOf[Option[_]].typeConstructor
-    if(typ.typeConstructor==optType)
+    if(isOptionalType(c)(typ))
       typ match {
         case TypeRef(_, _, args) => args.headOption
         case _ => None
       }
     else None
+  }
+
+  private def isOptionalType(c: Context)(typ: c.universe.Type): Boolean = {
+    c.typeOf[Option[_]].typeConstructor == typ.typeConstructor
   }
 
   private def bsonDocPath(c: Context): c.universe.Select = {
