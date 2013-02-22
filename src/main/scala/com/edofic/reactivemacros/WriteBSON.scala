@@ -13,6 +13,10 @@ trait WriteBSON[A]{
 }
 
 trait WriteBSONimplicits {
+  implicit def useExistingBSONWriter[A](implicit writer: BSONWriter[A]) = new WriteBSON[A] {
+    def write(value: A): BSONValue = writer.toBSON(value)
+  }
+
   implicit val stringWriter = new WriteBSON[String] {
     def write(value: String): BSONValue = BSONString(value)
   }
