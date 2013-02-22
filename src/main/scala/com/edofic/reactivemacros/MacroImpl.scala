@@ -48,12 +48,22 @@ private object MacroImpl {
 
     val values = constructor.paramss.head map {
       param =>
-        val typ = appliedType(readerType(c), List(param.typeSignature))
+        val sig = param.typeSignature
+        val optParam = optionTypeParameter(c)(sig)
+        val typ = appliedType(readerType(c), List(optParam getOrElse sig))
         val reader = c.inferImplicitValue(typ)
-        if (reader.isEmpty) c.abort(c.enclosingPosition, s"Implicit Reader for parameter '$param' not found")
+        if (reader.isEmpty) c.abort(c.enclosingPosition, s"Implicit $typ '$param' not found")
 
         val arg = Apply(Select(Ident(newTermName("map")), "apply"), List(Literal(Constant(param.name.toString))))
-        Apply(Select(reader, "read"), List(arg))
+        val readExp = c.Expr[Nothing](Apply(Select(reader, "read"), List(arg)))
+        val exp = if (optParam.isDefined) reify(
+            try{
+              Some(readExp.splice)
+            } catch {
+              case _: Exception => None
+            }
+          ) else readExp
+        exp.tree
     }
 
     val constructorTree = c.parse(constructor.fullName)
@@ -110,6 +120,18 @@ private object MacroImpl {
         Apply(bsonDocPath(c), values)
       )
     )
+  }
+
+  //Some(A) for Option[A] else None
+  private def optionTypeParameter(c: Context)(typ: c.universe.Type): Option[c.universe.Type] = {
+    import c.universe._
+    val optType = c.typeOf[Option[_]].typeConstructor
+    if(typ.typeConstructor==optType)
+      typ match {
+        case TypeRef(_, _, args) => args.headOption
+        case _ => None
+      }
+    else None
   }
 
   private def bsonDocPath(c: Context): c.universe.Select = {
