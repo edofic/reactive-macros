@@ -87,7 +87,10 @@ private object MacroImpl {
         case TypeRef(_, _, args) =>
           args.head match {
             case t@TypeRef(_, _, Nil) => Some(List(t))
-            case TypeRef(_, _, args) => Some(args)
+            case typ@TypeRef(_, t, args) =>
+              Some(
+                if(t.name.toString.matches("Tuple\\d\\d?")) args else List(typ)
+              )
             case _ => None
           }
         case _ => None
@@ -105,7 +108,7 @@ private object MacroImpl {
         val neededType = appliedType(writerType(c), List(typ))
         val writer = c.inferImplicitValue(neededType)
         if (writer.isEmpty) c.abort(c.enclosingPosition, s"Implicit $typ for '$param' not found")
-        val tuple_i = Select(tuple, "_" + (i + 1))
+        val tuple_i = if(types.length==1) tuple else Select(tuple, "_" + (i + 1))
         val bs_value = c.Expr[BSONValue](Apply(Select(writer, "write"), List(tuple_i)))
         val name = c.literal(param.name.toString)
         reify(
@@ -120,7 +123,7 @@ private object MacroImpl {
         val neededType = appliedType(writerType(c), List(typ))
         val writer = c.inferImplicitValue(neededType)
         if (writer.isEmpty) c.abort(c.enclosingPosition, s"Implicit $typ for '$param' not found")
-        val tuple_i = c.Expr[Option[Any]](Select(tuple, "_" + (i + 1)))
+        val tuple_i = c.Expr[Option[Any]](if(types.length==1) tuple else Select(tuple, "_" + (i + 1)))
         val buf = c.Expr[ListBuffer[(String,BSONValue)]](Ident("buf"))
         val bs_value = c.Expr[BSONValue](Apply(Select(writer, "write"), List(Select(tuple_i.tree, "get"))))
         val name = c.literal(param.name.toString)
