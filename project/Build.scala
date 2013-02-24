@@ -11,5 +11,10 @@ object MacroBuild extends Build{
     libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-compiler" % _)
   )
 
-  lazy val main = Project("main", file("."), settings = buildSettings) 
+  lazy val main = Project("main", file("."), settings = buildSettings).settings(
+    organization := "com.edofic",
+    name := "reactivemacros",
+    version  := "0.1-SNAPSHOT",
+    publishTo := Some(Resolver.file("snapshots", new File(Path.userHome, "/git/repository/snapshots")))
+  )
 }

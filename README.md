@@ -14,6 +14,11 @@ Inspired by Play! Framework's JSON macros(see [JSON Macro Inception](http://www.
     case class Person(firstName: String, lastName: String)
     val formatter: BSONWriter[Person] with BSONReader[Person] = FormatBSON[Person]
 
+And simply add dependency to your build settings(build.sbt or project/Build.scala)
+
+    resolvers += "edofic snapshots" at "http://edofic.github.com/repository/snapshots"
+    libraryDependencies += "com.edofic" %% "reactivemacros" % "0.1-SNAPSHOT"
+
 And there you have your instances. Behind the scenes is some macro magic you're welcome to check out. Also see tests(src/test/scala/) for more samples. 
 
 Oh yeah, it plays along with existing instances - it picks them up from the implicit scope. And you can define readers and writers for raw values too using `ReadBSON` and `WriteBSON` type classes. 
