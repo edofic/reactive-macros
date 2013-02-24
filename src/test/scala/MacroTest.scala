@@ -1,4 +1,4 @@
-import com.edofic.reactivemacros.FormatBSON
+import com.edofic.reactivemacros.{WriteBSON, ReadBSON, FormatBSON}
 import org.scalatest.FunSuite
 import reactivemongo.bson.handlers.{BSONWriter, BSONReader}
 
@@ -47,6 +47,11 @@ class MacroTest extends FunSuite{
     roundtrip(OptionalSingle(Some("foo")), f)
     roundtrip(OptionalSingle(None), f)
   }
+
+  test("case class definition inside an object"){
+    import Nest._
+    roundtrip(Nested("foo"), FormatBSON[Nested])
+  }
 }
 
 case class Person(firstName: String, lastName: String)
@@ -57,3 +62,7 @@ case class Optional(name: String, value: Option[String])
 case class Single(value: String)
 case class OptionalSingle(value: Option[String])
 case class SingleTuple(value: (String, String))
+
+object Nest{
+  case class Nested(name: String)
+}
