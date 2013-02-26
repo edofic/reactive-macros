@@ -40,6 +40,10 @@ trait WriteBSONimplicits {
   implicit def seqWriter[A](implicit aWriter: WriteBSON[A]) = new WriteBSON[Seq[A]] {
     def write(value: Seq[A]): BSONValue = BSONArray((value map aWriter.write): _*)
   }
+
+  implicit val objectIDWriter = new WriteBSON[BSONObjectID] {
+    def write(value: BSONObjectID): BSONValue = value
+  }
 }
 
 object WriteBSON extends WriteBSONimplicits {

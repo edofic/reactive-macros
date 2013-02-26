@@ -1,5 +1,6 @@
 import com.edofic.reactivemacros.{WriteBSON, ReadBSON, FormatBSON}
 import org.scalatest.FunSuite
+import reactivemongo.bson.BSONObjectID
 import reactivemongo.bson.handlers.{BSONWriter, BSONReader}
 
 /**
@@ -52,6 +53,10 @@ class MacroTest extends FunSuite{
     import Nest._
     roundtrip(Nested("foo"), FormatBSON[Nested])
   }
+
+  test("bson object id"){
+    roundtrip(User(name="john"), FormatBSON[User])
+  }
 }
 
 case class Person(firstName: String, lastName: String)
@@ -62,6 +67,7 @@ case class Optional(name: String, value: Option[String])
 case class Single(value: String)
 case class OptionalSingle(value: Option[String])
 case class SingleTuple(value: (String, String))
+case class User(_id: BSONObjectID = BSONObjectID.generate, name: String)
 
 object Nest{
   case class Nested(name: String)

@@ -41,6 +41,10 @@ trait ReadBSONimplicits {
     def read(value: BSONValue): Seq[A] =
       value.asInstanceOf[BSONStructure].values.map(aReader.read).toSeq
   }
+
+  implicit val objectIdReader = new ReadBSON[BSONObjectID] {
+    def read(value: BSONValue): BSONObjectID = value.asInstanceOf[BSONObjectID]
+  }
 }
 
 object ReadBSON extends ReadBSONimplicits {
