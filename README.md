@@ -36,6 +36,7 @@ There are some rough edges still:
 - Seq
 - Option
 - case classes can be defined inside objects
+- You may overload apply method on the companion object and the macro will still pick the right one
 
 ### Unsupported
 

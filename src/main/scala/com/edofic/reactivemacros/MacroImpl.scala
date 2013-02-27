@@ -45,7 +45,7 @@ private object MacroImpl {
   private def readBody[A: c.WeakTypeTag](c: Context): c.Expr[A] = {
     import c.universe._
 
-    val constructor = applyMethod[A](c)
+    val (constructor, _) = matchingApplyUnapply[A](c)
 
     val values = constructor.paramss.head map {
       param =>
@@ -80,26 +80,9 @@ private object MacroImpl {
   private def writeBody[A: c.WeakTypeTag](c: Context): c.Expr[BSONDocument] = {
     import c.universe._
 
-    val deconstructor = unapplyMethod[A](c)
-
-    val types = {
-      deconstructor.returnType match {
-        case TypeRef(_, _, args) =>
-          args.head match {
-            case t@TypeRef(_, _, Nil) => Some(List(t))
-            case typ@TypeRef(_, t, args) =>
-              Some(
-                if(t.name.toString.matches("Tuple\\d\\d?")) args else List(typ)
-              )
-            case _ => None
-          }
-        case _ => None
-      }
-    } getOrElse c.abort(c.enclosingPosition, "something wrong with unapply type")
-
-    val constructorParams = applyMethod[A](c).paramss.head
-
-    if (constructorParams.length != types.length) c.abort(c.enclosingPosition, "apply/unapply don't match")
+    val (constructor, deconstructor) = matchingApplyUnapply[A](c)
+    val types = unapplyReturnTypes(c)(deconstructor)
+    val constructorParams = constructor.paramss.head
 
     val tuple = Ident(newTermName("tuple"))
     val (optional, required) = constructorParams.zipWithIndex zip types partition (t=>isOptionalType(c)(t._2))
@@ -155,6 +138,23 @@ private object MacroImpl {
     )
   }
 
+  private def unapplyReturnTypes(c: Context)(deconstructor: c.universe.MethodSymbol): List[c.universe.Type] = {
+    import c.universe._
+    val opt = deconstructor.returnType match {
+      case TypeRef(_, _, args) =>
+        args.head match {
+          case t@TypeRef(_, _, Nil) => Some(List(t))
+          case typ@TypeRef(_, t, args) =>
+            Some(
+              if (t.name.toString.matches("Tuple\\d\\d?")) args else List(typ)
+            )
+          case _ => None
+        }
+      case _ => None
+    }
+    opt getOrElse c.abort(c.enclosingPosition, "something wrong with unapply type")
+  }
+
   //Some(A) for Option[A] else None
   private def optionTypeParameter(c: Context)(typ: c.universe.Type): Option[c.universe.Type] = {
     import c.universe._
@@ -175,11 +175,11 @@ private object MacroImpl {
     Select(Select(Ident(newTermName("reactivemongo")), "bson"), "BSONDocument")
   }
 
-  private def applyMethod[A: c.WeakTypeTag](c: Context): c.universe.MethodSymbol = {
+  private def applyMethod[A: c.WeakTypeTag](c: Context): c.universe.Symbol = {
     import c.universe._
     companion[A](c).typeSignature.declaration(stringToTermName("apply")) match {
       case NoSymbol => c.abort(c.enclosingPosition, "No apply function found")
-      case s => s.asMethod
+      case s => s
     }
   }
 
@@ -189,6 +189,19 @@ private object MacroImpl {
       case NoSymbol => c.abort(c.enclosingPosition, "No unapply function found")
       case s => s.asMethod
     }
+  }
+
+  private def matchingApplyUnapply[A: c.WeakTypeTag](c: Context): (c.universe.MethodSymbol, c.universe.MethodSymbol) = {
+    import c.universe._
+    val applySymbol = applyMethod[A](c)
+    val unapply = unapplyMethod[A](c)
+
+    val alternatives = applySymbol.asTerm.alternatives map (_.asMethod)
+    val u = unapplyReturnTypes(c)(unapply)
+    val applys = alternatives filter (_.paramss.head.map(_.typeSignature) == u)
+
+    val apply = applys.headOption getOrElse c.abort(c.enclosingPosition, "No matching apply/unapply found")
+    (apply,unapply)
   }
 
   private def writerType(c: Context): c.Type = {

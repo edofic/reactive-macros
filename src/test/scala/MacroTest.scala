@@ -57,6 +57,14 @@ class MacroTest extends FunSuite{
   test("bson object id"){
     roundtrip(User(name="john"), FormatBSON[User])
   }
+
+  test("overloaded apply"){
+    val doc1 = OverloadedApply("hello")
+    val doc2 = OverloadedApply(List("hello", "world"))
+    val f = FormatBSON[OverloadedApply]
+    roundtrip(doc1, f)
+    roundtrip(doc2, f)
+  }
 }
 
 case class Person(firstName: String, lastName: String)
@@ -71,4 +79,13 @@ case class User(_id: BSONObjectID = BSONObjectID.generate, name: String)
 
 object Nest{
   case class Nested(name: String)
+}
+
+case class OverloadedApply(string: String)
+object OverloadedApply{
+  def apply(n: Int){
+    println(n)
+  }
+
+  def apply(seq: Seq[String]): OverloadedApply = OverloadedApply(seq mkString " ")
 }
