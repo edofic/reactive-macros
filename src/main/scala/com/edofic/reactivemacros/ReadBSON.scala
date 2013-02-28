@@ -13,7 +13,7 @@ trait ReadBSON[A]{
 }
 
 trait ReadBSONimplicits {
-  implicit def useExistingBSONWriter[A](implicit reader: BSONReader[A]) = new ReadBSON[A] {
+  implicit def useExistingBSONWReader[A](implicit reader: BSONReader[A]) = new ReadBSON[A] {
     def read(value: BSONValue): A = reader.fromBSON(value.asInstanceOf[BSONDocument])
   }
 
