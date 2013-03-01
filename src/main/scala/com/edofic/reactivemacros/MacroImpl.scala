@@ -67,14 +67,16 @@ private object MacroImpl {
         exp.tree
     }
 
-    val constructorTree = c.parse(constructor.fullName)
+    val constructorTree = Select(Ident(companion[A](c).name.toString), "apply")
 
-    c.Expr[A](
+    val result = c.Expr[A](
       Block(
         ValDef(Modifiers(), newTermName("map"), TypeTree(), Select(Ident("document"), "mapped")),
         Apply(constructorTree, values)
       )
     )
+//    c.echo(c.enclosingPosition, show(result))
+    result
   }
 
   private def writeBody[A: c.WeakTypeTag](c: Context): c.Expr[BSONDocument] = {
@@ -116,9 +118,9 @@ private object MacroImpl {
       }
     }
 
-    val companionTree = c.parse(companion[A](c).fullName)
+    val unapplyTree =  Select(Ident(companion[A](c).name.toString), "unapply")
     val document = Ident(newTermName("document"))
-    val invokeUnapply = Select(Apply(Select(companionTree, "unapply"), List(document)), "get")
+    val invokeUnapply = Select(Apply(unapplyTree, List(document)), "get")
     val tupleDef = ValDef(Modifiers(), newTermName("tuple"), TypeTree(), invokeUnapply)
     val mkBSONdoc = Apply(bsonDocPath(c), values)
 

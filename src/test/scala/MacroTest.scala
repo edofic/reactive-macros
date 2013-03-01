@@ -1,4 +1,4 @@
-import com.edofic.reactivemacros.{WriteBSON, ReadBSON, FormatBSON}
+import com.edofic.reactivemacros.FormatBSON
 import org.scalatest.FunSuite
 import reactivemongo.bson.BSONObjectID
 import reactivemongo.bson.handlers.{BSONWriter, BSONReader}
@@ -50,7 +50,7 @@ class MacroTest extends FunSuite{
   }
 
   test("case class definition inside an object"){
-    import Nest._
+    import Nest._  //you need Nested in scope because .Nested won't work
     roundtrip(Nested("foo"), FormatBSON[Nested])
   }
 
@@ -64,6 +64,26 @@ class MacroTest extends FunSuite{
     val f = FormatBSON[OverloadedApply]
     roundtrip(doc1, f)
     roundtrip(doc2, f)
+  }
+
+  test("case class and format inside trait"){
+    val t = new NestModule {}
+    roundtrip(t.Nested("it works"), t.format)
+  }
+
+  test("case class inside trait with format outside"){
+    val t = new NestModule {}
+    import t._ //you need Nested in scope because t.Nested won't work
+    val format = FormatBSON[Nested]
+    roundtrip(Nested("it works"), format)
+  }
+
+  test("not polluting local scope demo"){
+    val format = {
+      import Nest.Nested
+      FormatBSON[Nested]
+    }
+    roundtrip(Nest.Nested("hai"), format)
   }
 }
 
@@ -88,4 +108,9 @@ object OverloadedApply{
   }
 
   def apply(seq: Seq[String]): OverloadedApply = OverloadedApply(seq mkString " ")
+}
+
+trait NestModule{
+  case class Nested(name: String)
+  val format = FormatBSON[Nested]
 }

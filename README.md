@@ -35,10 +35,10 @@ There are some rough edges still:
 - nesting
 - Seq
 - Option
-- case classes can be defined inside objects
+- case classes can also be defined inside objects, traits or classes
 - You may overload apply method on the companion object and the macro will still pick the right one
 
 ### Unsupported
 
 - recursive structures
-- case classes cannot be defined inside other (case) classes or functions(something to do with the pointer to the parrent)
+- case classes cannot be defined inside functions
