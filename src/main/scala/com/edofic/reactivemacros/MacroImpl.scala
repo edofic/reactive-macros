@@ -78,7 +78,7 @@ private object MacroImpl {
       )
     )
 
-    if(isVerbose[Opts](c)){
+    if(hasOption[Opts, Options.Verbose](c)){
       c.echo(c.enclosingPosition, show(result))
     }
     result
@@ -144,15 +144,15 @@ private object MacroImpl {
         Block(tupleDef, mkBSONdoc)
     )
 
-    if(isVerbose[Opts](c)){
+    if(hasOption[Opts, Options.Verbose](c)){
       c.echo(c.enclosingPosition, show(result))
     }
     result
   }
 
-  def isVerbose[Opts: c.WeakTypeTag](c: Context): Boolean = {
+  def hasOption[Opts: c.WeakTypeTag, O: c.TypeTag](c: Context): Boolean = {
     import c.universe._
-    weakTypeOf[Opts] <:< typeOf[Options.Verbose]
+    weakTypeOf[Opts] <:< typeOf[O]
   }
 
   private def unapplyReturnTypes(c: Context)(deconstructor: c.universe.MethodSymbol): List[c.universe.Type] = {
