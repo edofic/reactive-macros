@@ -44,7 +44,46 @@ private object MacroImpl {
     )
   }
 
-  private def readBody[A: c.WeakTypeTag, Opts: c.WeakTypeTag](c: Context): c.Expr[A] = {
+  private def readBody[A, Opts](c: Context)(implicit A: c.WeakTypeTag[A], Opts: c.WeakTypeTag[Opts]): c.Expr[A] = {
+    import c.universe._
+
+    readyBodyConstruct(c)(A)
+
+    val result = c.Expr[A](
+      Block(
+        ValDef(Modifiers(), newTermName("map"), TypeTree(), Select(Ident("document"), "mapped")),
+        readyBodyConstruct[A](c)
+      )
+    )
+
+    if(hasOption[Opts, Options.Verbose](c)){
+      c.echo(c.enclosingPosition, show(result))
+    }
+    result
+  }
+
+
+  private def writeBody[A, Opts](c: Context)(implicit A: c.WeakTypeTag[A], Opts: c.WeakTypeTag[Opts]): c.Expr[BSONDocument] = {
+    import c.universe._
+
+    val unapplyTree = Select(Ident(companion[A](c).name.toString), "unapply")
+    val document = Ident(newTermName("document"))
+    val invokeUnapply = Select(Apply(unapplyTree, List(document)), "get")
+    val tupleDef = ValDef(Modifiers(), newTermName("tuple"), TypeTree(), invokeUnapply)
+
+    val result = c.Expr[BSONDocument](
+        Block(
+          (tupleDef :: writeBodyConstruct[A, Opts](c)): _*
+        )
+    )
+
+    if(hasOption[Opts, Options.Verbose](c)){
+      c.echo(c.enclosingPosition, show(result))
+    }
+    result
+  }
+
+  private def readyBodyConstruct[A: c.WeakTypeTag](c: Context) = {
     import c.universe._
 
     val (constructor, _) = matchingApplyUnapply[A](c)
@@ -60,32 +99,21 @@ private object MacroImpl {
         val arg = Apply(Select(Ident(newTermName("map")), "apply"), List(Literal(Constant(param.name.toString))))
         val readExp = c.Expr[Nothing](Apply(Select(reader, "read"), List(arg)))
         val exp = if (optParam.isDefined) reify(
-          try{
+          try {
             Some(readExp.splice)
           } catch {
             case _: Exception => None
           }
-        ) else readExp
+        )
+        else readExp
         exp.tree
     }
 
     val constructorTree = Select(Ident(companion[A](c).name.toString), "apply")
-
-    val result = c.Expr[A](
-      Block(
-        ValDef(Modifiers(), newTermName("map"), TypeTree(), Select(Ident("document"), "mapped")),
-        Apply(constructorTree, values)
-      )
-    )
-
-    if(hasOption[Opts, Options.Verbose](c)){
-      c.echo(c.enclosingPosition, show(result))
-    }
-    result
+    Apply(constructorTree, values)
   }
 
-
-  private def writeBody[A: c.WeakTypeTag, Opts: c.WeakTypeTag](c: Context): c.Expr[BSONDocument] = {
+  def writeBodyConstruct[A: c.WeakTypeTag, Opts: c.WeakTypeTag](c: Context): List[c.universe.Tree] = {
     import c.universe._
 
     val (constructor, deconstructor) = matchingApplyUnapply[A](c)
@@ -93,13 +121,13 @@ private object MacroImpl {
     val constructorParams = constructor.paramss.head
 
     val tuple = Ident(newTermName("tuple"))
-    val (optional, required) = constructorParams.zipWithIndex zip types partition (t=>isOptionalType(c)(t._2))
+    val (optional, required) = constructorParams.zipWithIndex zip types partition (t => isOptionalType(c)(t._2))
     val values = required map {
       case ((param, i), typ) => {
         val neededType = appliedType(writerType(c), List(typ))
         val writer = c.inferImplicitValue(neededType)
         if (writer.isEmpty) c.abort(c.enclosingPosition, s"Implicit $typ for '$param' not found")
-        val tuple_i = if(types.length==1) tuple else Select(tuple, "_" + (i + 1))
+        val tuple_i = if (types.length == 1) tuple else Select(tuple, "_" + (i + 1))
         val bs_value = c.Expr[BSONValue](Apply(Select(writer, "write"), List(tuple_i)))
         val name = c.literal(param.name.toString)
         reify(
@@ -114,49 +142,34 @@ private object MacroImpl {
         val neededType = appliedType(writerType(c), List(typ))
         val writer = c.inferImplicitValue(neededType)
         if (writer.isEmpty) c.abort(c.enclosingPosition, s"Implicit $typ for '$param' not found")
-        val tuple_i = c.Expr[Option[Any]](if(types.length==1) tuple else Select(tuple, "_" + (i + 1)))
-        val buf = c.Expr[ListBuffer[(String,BSONValue)]](Ident("buf"))
+        val tuple_i = c.Expr[Option[Any]](if (types.length == 1) tuple else Select(tuple, "_" + (i + 1)))
+        val buf = c.Expr[ListBuffer[(String, BSONValue)]](Ident("buf"))
         val bs_value = c.Expr[BSONValue](Apply(Select(writer, "write"), List(Select(tuple_i.tree, "get"))))
         val name = c.literal(param.name.toString)
-        reify{
-          if(tuple_i.splice.isDefined) buf.splice.append((name.splice, bs_value.splice))
+        reify {
+          if (tuple_i.splice.isDefined) buf.splice.append((name.splice, bs_value.splice))
         }.tree
       }
     }
 
-    val unapplyTree =  Select(Ident(companion[A](c).name.toString), "unapply")
-    val document = Ident(newTermName("document"))
-    val invokeUnapply = Select(Apply(unapplyTree, List(document)), "get")
-    val tupleDef = ValDef(Modifiers(), newTermName("tuple"), TypeTree(), invokeUnapply)
-
-    val className = if(hasOption[Opts, Options.SaveClassName](c)) Some{
+    val className = if (hasOption[Opts, Options.SaveClassName](c)) Some {
       val name = c.literal(weakTypeOf[A].typeSymbol.fullName)
-      reify{("className", WriteBSON.stringWriter.write(name.splice))}.tree
+      reify {
+        ("className", WriteBSON.stringWriter.write(name.splice))
+      }.tree
     } else None
 
     val mkBSONdoc = Apply(bsonDocPath(c), values ++ className)
 
-    val result = c.Expr[BSONDocument](
-      if(optional.length>0)
-        Block(
-          List(
-            tupleDef,
-            ValDef(Modifiers(), newTermName("bson"), TypeTree(), mkBSONdoc),
-            c.parse("val buf = scala.collection.mutable.ListBuffer[(String,reactivemongo.bson.BSONValue)]()")
-          ) ++ appends,
-          c.parse("bson.append(buf: _*)")
-        )
-      else
-        Block(tupleDef, mkBSONdoc)
-    )
+    val withAppends = List(
+      ValDef(Modifiers(), newTermName("bson"), TypeTree(), mkBSONdoc),
+      c.parse("val buf = scala.collection.mutable.ListBuffer[(String,reactivemongo.bson.BSONValue)]()")
+    ) ++ appends :+ c.parse("bson.append(buf: _*)")
 
-    if(hasOption[Opts, Options.Verbose](c)){
-      c.echo(c.enclosingPosition, show(result))
-    }
-    result
+    if(optional.length == 0) List(mkBSONdoc) else withAppends
   }
 
-  def hasOption[Opts: c.WeakTypeTag, O: c.TypeTag](c: Context): Boolean = {
+  private def hasOption[Opts: c.WeakTypeTag, O: c.TypeTag](c: Context): Boolean = {
     import c.universe._
     weakTypeOf[Opts] <:< typeOf[O]
   }
