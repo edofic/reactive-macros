@@ -48,5 +48,6 @@ trait ReadBSONimplicits {
 }
 
 object ReadBSON extends ReadBSONimplicits {
-  def apply[A]: BSONReader[A] = macro MacroImpl.read[A]
+  def apply[A]: BSONReader[A] = macro MacroImpl.read[A, Options.Default]
+  def custom[A, Opts]: BSONReader[A] = macro MacroImpl.read[A, Opts]
 }

@@ -11,9 +11,9 @@ import collection.mutable.ListBuffer
  * Time: 6:51 PM
  */
 private object MacroImpl {
-  def read[A: c.WeakTypeTag](c: Context): c.Expr[BSONReader[A]] = {
-    val body = readBody(c)
-
+  def read[A, Opts](c: Context)
+                   (implicit A: c.WeakTypeTag[A], Opts: c.WeakTypeTag[Opts]): c.Expr[BSONReader[A]] = {
+    val body = readBody(c)(A,Opts)
     c.universe.reify {
       new BSONReader[A] {
         def fromBSON(document: BSONDocument): A = body.splice
@@ -21,8 +21,9 @@ private object MacroImpl {
     }
   }
 
-  def write[A: c.WeakTypeTag](c: Context): c.Expr[BSONWriter[A]] = {
-    val body = writeBody(c)
+  def write[A, Opts](c: Context)
+                    (implicit A: c.WeakTypeTag[A], Opts: c.WeakTypeTag[Opts]): c.Expr[BSONWriter[A]] = {
+    val body = writeBody(c)(A, Opts)
     c.universe.reify (
       new BSONWriter[A] {
         def toBSON(document: A): BSONDocument = body.splice
@@ -30,9 +31,10 @@ private object MacroImpl {
     )
   }
 
-  def format[A: c.WeakTypeTag](c: Context): c.Expr[BSONReader[A] with BSONWriter[A]] = {
-    val r = readBody[A](c)
-    val w = writeBody[A](c)
+  def format[A, Opts](c: Context)
+                     (implicit A: c.WeakTypeTag[A], Opts: c.WeakTypeTag[Opts]): c.Expr[BSONReader[A] with BSONWriter[A]] = {
+    val r = readBody(c)(A, Opts)
+    val w = writeBody(c)(A, Opts)
     c.universe.reify(
       new BSONReader[A] with BSONWriter[A] {
         def fromBSON(document: BSONDocument): A = r.splice
@@ -42,7 +44,7 @@ private object MacroImpl {
     )
   }
 
-  private def readBody[A: c.WeakTypeTag](c: Context): c.Expr[A] = {
+  private def readBody[A: c.WeakTypeTag, Opts: c.WeakTypeTag](c: Context): c.Expr[A] = {
     import c.universe._
 
     val (constructor, _) = matchingApplyUnapply[A](c)
@@ -75,11 +77,15 @@ private object MacroImpl {
         Apply(constructorTree, values)
       )
     )
-//    c.echo(c.enclosingPosition, show(result))
+
+    if(isVerbose[Opts](c)){
+      c.echo(c.enclosingPosition, show(result))
+    }
     result
   }
 
-  private def writeBody[A: c.WeakTypeTag](c: Context): c.Expr[BSONDocument] = {
+
+  private def writeBody[A: c.WeakTypeTag, Opts: c.WeakTypeTag](c: Context): c.Expr[BSONDocument] = {
     import c.universe._
 
     val (constructor, deconstructor) = matchingApplyUnapply[A](c)
@@ -124,8 +130,7 @@ private object MacroImpl {
     val tupleDef = ValDef(Modifiers(), newTermName("tuple"), TypeTree(), invokeUnapply)
     val mkBSONdoc = Apply(bsonDocPath(c), values)
 
-
-    c.Expr[BSONDocument](
+    val result = c.Expr[BSONDocument](
       if(optional.length>0)
         Block(
           List(
@@ -138,6 +143,16 @@ private object MacroImpl {
       else
         Block(tupleDef, mkBSONdoc)
     )
+
+    if(isVerbose[Opts](c)){
+      c.echo(c.enclosingPosition, show(result))
+    }
+    result
+  }
+
+  def isVerbose[Opts: c.WeakTypeTag](c: Context): Boolean = {
+    import c.universe._
+    weakTypeOf[Opts] <:< typeOf[Options.Verbose]
   }
 
   private def unapplyReturnTypes(c: Context)(deconstructor: c.universe.MethodSymbol): List[c.universe.Type] = {

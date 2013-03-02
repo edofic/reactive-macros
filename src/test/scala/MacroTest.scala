@@ -1,4 +1,4 @@
-import com.edofic.reactivemacros.FormatBSON
+import com.edofic.reactivemacros._
 import org.scalatest.FunSuite
 import reactivemongo.bson.BSONObjectID
 import reactivemongo.bson.handlers.{BSONWriter, BSONReader}
@@ -84,6 +84,11 @@ class MacroTest extends FunSuite{
       FormatBSON[Nested]
     }
     roundtrip(Nest.Nested("hai"), format)
+  }
+
+  test("working with options"){
+    val format = FormatBSON.custom[Person, Options.Verbose]
+    roundtrip(Person("john","doe"), format)
   }
 }
 

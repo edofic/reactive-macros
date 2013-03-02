@@ -1,0 +1,11 @@
+package com.edofic.reactivemacros
+
+/**
+ * User: andraz
+ * Date: 3/2/13
+ * Time: 12:06 AM
+ */
+object Options {
+  trait Default
+  trait Verbose
+}
