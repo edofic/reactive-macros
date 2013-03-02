@@ -7,6 +7,6 @@ package com.edofic.reactivemacros
  */
 object Options {
   trait Default
-  trait Verbose
-  trait SaveClassName
+  trait Verbose extends Default
+  trait SaveClassName extends Default
 }

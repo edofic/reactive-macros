@@ -48,5 +48,5 @@ trait WriteBSONimplicits {
 
 object WriteBSON extends WriteBSONimplicits {
   def apply[A]: BSONWriter[A] = macro MacroImpl.write[A, Options.Default]
-  def custom[A, Opts]: BSONWriter[A] = macro MacroImpl.write[A,Opts]
+  def custom[A, Opts  <: Options.Default]: BSONWriter[A] = macro MacroImpl.write[A,Opts]
 }

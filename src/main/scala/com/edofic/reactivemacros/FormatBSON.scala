@@ -14,5 +14,5 @@ trait FormatBSONimplicits extends ReadBSONimplicits with WriteBSONimplicits
 
 object FormatBSON extends FormatBSONimplicits {
   def apply[A]: BSONReader[A] with BSONWriter[A] = macro MacroImpl.format[A, Options.Default]
-  def custom[A, Opts]: BSONReader[A] with BSONWriter[A] = macro MacroImpl.format[A, Opts]
+  def custom[A, Opts  <: Options.Default]: BSONReader[A] with BSONWriter[A] = macro MacroImpl.format[A, Opts]
 }
