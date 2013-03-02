@@ -1,6 +1,6 @@
 import com.edofic.reactivemacros._
 import org.scalatest.FunSuite
-import reactivemongo.bson.BSONObjectID
+import reactivemongo.bson.{BSONString, BSONObjectID}
 import reactivemongo.bson.handlers.{BSONWriter, BSONReader}
 
 /**
@@ -89,6 +89,15 @@ class MacroTest extends FunSuite{
   test("working with options"){
     val format = FormatBSON.custom[Person, Options.Verbose]
     roundtrip(Person("john","doe"), format)
+  }
+
+  test("class name"){
+    val person = Person("jim", "moriarty")
+    val format = FormatBSON.custom[Person, Options.SaveClassName]
+    val doc = format toBSON person
+    val map = doc.mapped
+    assert(map("className") === BSONString("Person"))
+    assert(format.fromBSON(doc) === person)
   }
 }
 

@@ -128,7 +128,13 @@ private object MacroImpl {
     val document = Ident(newTermName("document"))
     val invokeUnapply = Select(Apply(unapplyTree, List(document)), "get")
     val tupleDef = ValDef(Modifiers(), newTermName("tuple"), TypeTree(), invokeUnapply)
-    val mkBSONdoc = Apply(bsonDocPath(c), values)
+
+    val className = if(hasOption[Opts, Options.SaveClassName](c)) Some{
+      val name = c.literal(weakTypeOf[A].typeSymbol.fullName)
+      reify{("className", WriteBSON.stringWriter.write(name.splice))}.tree
+    } else None
+
+    val mkBSONdoc = Apply(bsonDocPath(c), values ++ className)
 
     val result = c.Expr[BSONDocument](
       if(optional.length>0)
