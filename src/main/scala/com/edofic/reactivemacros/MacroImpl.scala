@@ -11,9 +11,8 @@ import collection.mutable.ListBuffer
  * Time: 6:51 PM
  */
 private object MacroImpl {
-  def read[A, Opts](c: Context)
-                   (implicit A: c.WeakTypeTag[A], Opts: c.WeakTypeTag[Opts]): c.Expr[BSONReader[A]] = {
-    val body = readBody(c)(A,Opts)
+  def read[A: c.WeakTypeTag, Opts: c.WeakTypeTag](c: Context): c.Expr[BSONReader[A]] = {
+    val body = readBody[A](c)(c.weakTypeOf[A],c.weakTypeOf[Opts])
     c.universe.reify {
       new BSONReader[A] {
         def fromBSON(document: BSONDocument): A = body.splice
@@ -21,9 +20,8 @@ private object MacroImpl {
     }
   }
 
-  def write[A, Opts](c: Context)
-                    (implicit A: c.WeakTypeTag[A], Opts: c.WeakTypeTag[Opts]): c.Expr[BSONWriter[A]] = {
-    val body = writeBody(c)(A, Opts)
+  def write[A: c.WeakTypeTag, Opts: c.WeakTypeTag](c: Context): c.Expr[BSONWriter[A]] = {
+    val body = writeBody(c)(c.weakTypeOf[A],c.weakTypeOf[Opts])
     c.universe.reify (
       new BSONWriter[A] {
         def toBSON(document: A): BSONDocument = body.splice
@@ -31,10 +29,9 @@ private object MacroImpl {
     )
   }
 
-  def format[A, Opts](c: Context)
-                     (implicit A: c.WeakTypeTag[A], Opts: c.WeakTypeTag[Opts]): c.Expr[BSONReader[A] with BSONWriter[A]] = {
-    val r = readBody(c)(A, Opts)
-    val w = writeBody(c)(A, Opts)
+  def format[A: c.WeakTypeTag, Opts: c.WeakTypeTag](c: Context): c.Expr[BSONReader[A] with BSONWriter[A]] = {
+    val r = readBody[A](c)(c.weakTypeOf[A],c.weakTypeOf[Opts])
+    val w = writeBody(c)(c.weakTypeOf[A],c.weakTypeOf[Opts])
     c.universe.reify(
       new BSONReader[A] with BSONWriter[A] {
         def fromBSON(document: BSONDocument): A = r.splice
@@ -44,7 +41,7 @@ private object MacroImpl {
     )
   }
 
-  private def readBody[A, Opts](c: Context)(implicit A: c.WeakTypeTag[A], Opts: c.WeakTypeTag[Opts]): c.Expr[A] = {
+  private def readBody[A](c: Context)(A: c.Type, Opts: c.Type): c.Expr[A] = {
     import c.universe._
 
     readyBodyConstruct(c)(A)
@@ -52,41 +49,41 @@ private object MacroImpl {
     val result = c.Expr[A](
       Block(
         ValDef(Modifiers(), newTermName("map"), TypeTree(), Select(Ident("document"), "mapped")),
-        readyBodyConstruct[A](c)
+        readyBodyConstruct(c)(A)
       )
     )
 
-    if(hasOption[Opts, Options.Verbose](c)){
+    if(hasOption[Options.Verbose](c)(Opts)){
       c.echo(c.enclosingPosition, show(result))
     }
     result
   }
 
 
-  private def writeBody[A, Opts](c: Context)(implicit A: c.WeakTypeTag[A], Opts: c.WeakTypeTag[Opts]): c.Expr[BSONDocument] = {
+  private def writeBody(c: Context)(A: c.Type, Opts: c.Type): c.Expr[BSONDocument] = {
     import c.universe._
 
-    val unapplyTree = Select(Ident(companion[A](c).name.toString), "unapply")
+    val unapplyTree = Select(Ident(companion(c)(A).name.toString), "unapply")
     val document = Ident(newTermName("document"))
     val invokeUnapply = Select(Apply(unapplyTree, List(document)), "get")
     val tupleDef = ValDef(Modifiers(), newTermName("tuple"), TypeTree(), invokeUnapply)
 
     val result = c.Expr[BSONDocument](
         Block(
-          (tupleDef :: writeBodyConstruct[A, Opts](c)): _*
+          (tupleDef :: writeBodyConstruct(c)(A, Opts)): _*
         )
     )
 
-    if(hasOption[Opts, Options.Verbose](c)){
+    if(hasOption[Options.Verbose](c)(Opts)){
       c.echo(c.enclosingPosition, show(result))
     }
     result
   }
 
-  private def readyBodyConstruct[A: c.WeakTypeTag](c: Context) = {
+  private def readyBodyConstruct(c: Context)(implicit A: c.Type) = {
     import c.universe._
 
-    val (constructor, _) = matchingApplyUnapply[A](c)
+    val (constructor, _) = matchingApplyUnapply(c)
 
     val values = constructor.paramss.head map {
       param =>
@@ -109,14 +106,14 @@ private object MacroImpl {
         exp.tree
     }
 
-    val constructorTree = Select(Ident(companion[A](c).name.toString), "apply")
+    val constructorTree = Select(Ident(companion(c).name.toString), "apply")
     Apply(constructorTree, values)
   }
 
-  def writeBodyConstruct[A: c.WeakTypeTag, Opts: c.WeakTypeTag](c: Context): List[c.universe.Tree] = {
+  def writeBodyConstruct(c: Context)(A: c.Type, Opts: c.Type): List[c.universe.Tree] = {
     import c.universe._
 
-    val (constructor, deconstructor) = matchingApplyUnapply[A](c)
+    val (constructor, deconstructor) = matchingApplyUnapply(c)(A)
     val types = unapplyReturnTypes(c)(deconstructor)
     val constructorParams = constructor.paramss.head
 
@@ -152,8 +149,8 @@ private object MacroImpl {
       }
     }
 
-    val className = if (hasOption[Opts, Options.SaveClassName](c)) Some {
-      val name = c.literal(weakTypeOf[A].typeSymbol.fullName)
+    val className = if (hasOption[Options.SaveClassName](c)(Opts)) Some {
+      val name = c.literal(A.typeSymbol.fullName)
       reify {
         ("className", WriteBSON.stringWriter.write(name.splice))
       }.tree
@@ -169,12 +166,12 @@ private object MacroImpl {
     if(optional.length == 0) List(mkBSONdoc) else withAppends
   }
 
-  private def hasOption[Opts: c.WeakTypeTag, O: c.TypeTag](c: Context): Boolean = {
+  private def hasOption[O: c.TypeTag](c: Context)(Opts: c.Type): Boolean = {
     import c.universe._
-    weakTypeOf[Opts] <:< typeOf[O]
+    Opts <:< typeOf[O]
   }
 
-  private def unapplyReturnTypes(c: Context)(deconstructor: c.universe.MethodSymbol): List[c.universe.Type] = {
+  private def unapplyReturnTypes(c: Context)(deconstructor: c.universe.MethodSymbol): List[c.Type] = {
     import c.universe._
     val opt = deconstructor.returnType match {
       case TypeRef(_, _, args) =>
@@ -192,18 +189,18 @@ private object MacroImpl {
   }
 
   //Some(A) for Option[A] else None
-  private def optionTypeParameter(c: Context)(typ: c.universe.Type): Option[c.universe.Type] = {
+  private def optionTypeParameter(c: Context)(implicit A: c.Type): Option[c.Type] = {
     import c.universe._
-    if(isOptionalType(c)(typ))
-      typ match {
+    if(isOptionalType(c)(A))
+      A match {
         case TypeRef(_, _, args) => args.headOption
         case _ => None
       }
     else None
   }
 
-  private def isOptionalType(c: Context)(typ: c.universe.Type): Boolean = {
-    c.typeOf[Option[_]].typeConstructor == typ.typeConstructor
+  private def isOptionalType(c: Context)(implicit A: c.Type): Boolean = {
+    c.typeOf[Option[_]].typeConstructor == A.typeConstructor
   }
 
   private def bsonDocPath(c: Context): c.universe.Select = {
@@ -211,26 +208,26 @@ private object MacroImpl {
     Select(Select(Ident(newTermName("reactivemongo")), "bson"), "BSONDocument")
   }
 
-  private def applyMethod[A: c.WeakTypeTag](c: Context): c.universe.Symbol = {
+  private def applyMethod(c: Context)(implicit A: c.Type): c.universe.Symbol = {
     import c.universe._
-    companion[A](c).typeSignature.declaration(stringToTermName("apply")) match {
+    companion(c)(A).typeSignature.declaration(stringToTermName("apply")) match {
       case NoSymbol => c.abort(c.enclosingPosition, "No apply function found")
       case s => s
     }
   }
 
-  private def unapplyMethod[A: c.WeakTypeTag](c: Context): c.universe.MethodSymbol= {
+  private def unapplyMethod(c: Context)(implicit A: c.Type): c.universe.MethodSymbol= {
     import c.universe._
-    companion[A](c).typeSignature.declaration(stringToTermName("unapply")) match {
+    companion(c)(A).typeSignature.declaration(stringToTermName("unapply")) match {
       case NoSymbol => c.abort(c.enclosingPosition, "No unapply function found")
       case s => s.asMethod
     }
   }
 
-  private def matchingApplyUnapply[A: c.WeakTypeTag](c: Context): (c.universe.MethodSymbol, c.universe.MethodSymbol) = {
+  private def matchingApplyUnapply(c: Context)(implicit A: c.Type): (c.universe.MethodSymbol, c.universe.MethodSymbol) = {
     import c.universe._
-    val applySymbol = applyMethod[A](c)
-    val unapply = unapplyMethod[A](c)
+    val applySymbol = applyMethod(c)(A)
+    val unapply = unapplyMethod(c)(A)
 
     val alternatives = applySymbol.asTerm.alternatives map (_.asMethod)
     val u = unapplyReturnTypes(c)(unapply)
@@ -248,7 +245,7 @@ private object MacroImpl {
     c.universe.typeOf[ReadBSON[_]].typeConstructor
   }
 
-  private def companion[A: c.WeakTypeTag](c: Context): c.Symbol = {
-    c.universe.weakTypeOf[A].typeSymbol.companionSymbol
+  private def companion(c: Context)(implicit A: c.Type): c.Symbol = {
+    A.typeSymbol.companionSymbol
   }
 }
