@@ -1,4 +1,5 @@
 import com.edofic.reactivemacros._
+import com.edofic.reactivemacros.Options.Verbose
 import org.scalatest.FunSuite
 import reactivemongo.bson.{BSONString, BSONObjectID}
 import reactivemongo.bson.handlers.{BSONWriter, BSONReader}
@@ -99,6 +100,16 @@ class MacroTest extends FunSuite{
     assert(map("className") === BSONString("Person"))
     assert(format.fromBSON(doc) === person)
   }
+
+  test("union"){
+    import Union._
+    import Options.{UnionType, \/}
+    val a = A(1)
+    val b = B("hai")
+    val format = FormatBSON.custom[T, UnionType[A \/ B]]
+    roundtrip(a, format)
+    roundtrip(b, format)
+  }
 }
 
 case class Person(firstName: String, lastName: String)
@@ -127,4 +138,10 @@ object OverloadedApply{
 trait NestModule{
   case class Nested(name: String)
   val format = FormatBSON[Nested]
+}
+
+object Union{
+  sealed trait T
+  case class A(n: Int) extends T
+  case class B(s: String) extends T
 }

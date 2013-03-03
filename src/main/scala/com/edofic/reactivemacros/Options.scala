@@ -9,4 +9,7 @@ object Options {
   trait Default
   trait Verbose extends Default
   trait SaveClassName extends Default
+  trait UnionType[Types <: \/[_,_]] extends SaveClassName with Default
+
+  trait \/[A,B]
 }

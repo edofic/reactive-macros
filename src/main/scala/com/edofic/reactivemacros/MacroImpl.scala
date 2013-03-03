@@ -44,12 +44,20 @@ private object MacroImpl {
   private def readBody[A](c: Context)(A: c.Type, Opts: c.Type): c.Expr[A] = {
     import c.universe._
 
-    readyBodyConstruct(c)(A)
+    val writer = parseUnionTypes(c)(Opts) map { types =>
+      val cases = types map { typ =>
+        val pattern = Literal(Constant(typ.typeSymbol.fullName)) //todo
+        val body = readBodyConstruct(c)(typ)
+        CaseDef(pattern, body)
+      }
+      val className = c.parse("""map("className").asInstanceOf[reactivemongo.bson.BSONString].value""")
+      Match(className, cases)
+    } getOrElse readBodyConstruct(c)(A)
 
     val result = c.Expr[A](
       Block(
         ValDef(Modifiers(), newTermName("map"), TypeTree(), Select(Ident("document"), "mapped")),
-        readyBodyConstruct(c)(A)
+        writer
       )
     )
 
@@ -63,16 +71,16 @@ private object MacroImpl {
   private def writeBody(c: Context)(A: c.Type, Opts: c.Type): c.Expr[BSONDocument] = {
     import c.universe._
 
-    val unapplyTree = Select(Ident(companion(c)(A).name.toString), "unapply")
-    val document = Ident(newTermName("document"))
-    val invokeUnapply = Select(Apply(unapplyTree, List(document)), "get")
-    val tupleDef = ValDef(Modifiers(), newTermName("tuple"), TypeTree(), invokeUnapply)
+    val writer = parseUnionTypes(c)(Opts) map { types =>
+      val cases = types map { typ =>
+        val pattern = Bind(newTermName("document"), Typed(Ident(nme.WILDCARD), TypeTree(typ)))
+        val body = writeBodyConstruct(c)(typ, Opts)
+        CaseDef(pattern, body)
+      }
+      Match(Ident("document"), cases)
+    } getOrElse writeBodyConstruct(c)(A, Opts)
 
-    val result = c.Expr[BSONDocument](
-        Block(
-          (tupleDef :: writeBodyConstruct(c)(A, Opts)): _*
-        )
-    )
+    val result = c.Expr[BSONDocument](writer)
 
     if(hasOption[Options.Verbose](c)(Opts)){
       c.echo(c.enclosingPosition, show(result))
@@ -80,7 +88,7 @@ private object MacroImpl {
     result
   }
 
-  private def readyBodyConstruct(c: Context)(implicit A: c.Type) = {
+  private def readBodyConstruct(c: Context)(implicit A: c.Type) = {
     import c.universe._
 
     val (constructor, _) = matchingApplyUnapply(c)
@@ -110,7 +118,7 @@ private object MacroImpl {
     Apply(constructorTree, values)
   }
 
-  def writeBodyConstruct(c: Context)(A: c.Type, Opts: c.Type): List[c.universe.Tree] = {
+  def writeBodyConstruct(c: Context)(A: c.Type, Opts: c.Type): c.Tree = {
     import c.universe._
 
     val (constructor, deconstructor) = matchingApplyUnapply(c)(A)
@@ -163,7 +171,41 @@ private object MacroImpl {
       c.parse("val buf = scala.collection.mutable.ListBuffer[(String,reactivemongo.bson.BSONValue)]()")
     ) ++ appends :+ c.parse("bson.append(buf: _*)")
 
-    if(optional.length == 0) List(mkBSONdoc) else withAppends
+    val writer = if(optional.length == 0) List(mkBSONdoc) else withAppends
+
+    val unapplyTree = Select(Ident(companion(c)(A).name.toString), "unapply")
+    val document = Ident(newTermName("document"))
+    val invokeUnapply = Select(Apply(unapplyTree, List(document)), "get")
+    val tupleDef = ValDef(Modifiers(), newTermName("tuple"), TypeTree(), invokeUnapply)
+
+    Block(
+      (tupleDef :: writer): _*
+    )
+  }
+
+  private def parseUnionTypes(c: Context)(Opts: c.Type): Option[List[c.Type]] = {
+    import c.universe._
+
+    val unionOption = c.typeOf[Options.UnionType[_]]
+    val union = c.typeOf[Options.\/[_,_]]
+    def parseUnionTree(tree: Type): List[Type] = {
+      if(tree <:< union) {
+        tree match {
+          case TypeRef(_,_, List(a,b)) => a :: parseUnionTree(b)
+        }
+      } else List(tree)
+    }
+
+    val tree = Opts match {
+      case t @ TypeRef(_, _, lst) if t <:< unionOption =>
+        lst.headOption
+
+      case RefinedType(types, _) =>
+        types.filter(_ <:< unionOption).flatMap{ case TypeRef(_,_,args) => args }.headOption
+
+      case _ => None
+    }
+    tree map {t => parseUnionTree(t)}
   }
 
   private def hasOption[O: c.TypeTag](c: Context)(Opts: c.Type): Boolean = {
@@ -211,7 +253,7 @@ private object MacroImpl {
   private def applyMethod(c: Context)(implicit A: c.Type): c.universe.Symbol = {
     import c.universe._
     companion(c)(A).typeSignature.declaration(stringToTermName("apply")) match {
-      case NoSymbol => c.abort(c.enclosingPosition, "No apply function found")
+      case NoSymbol => c.abort(c.enclosingPosition, s"No apply function found for $A")
       case s => s
     }
   }
@@ -219,7 +261,7 @@ private object MacroImpl {
   private def unapplyMethod(c: Context)(implicit A: c.Type): c.universe.MethodSymbol= {
     import c.universe._
     companion(c)(A).typeSignature.declaration(stringToTermName("unapply")) match {
-      case NoSymbol => c.abort(c.enclosingPosition, "No unapply function found")
+      case NoSymbol => c.abort(c.enclosingPosition, s"No unapply function found for $A")
       case s => s.asMethod
     }
   }
