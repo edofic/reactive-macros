@@ -16,7 +16,7 @@ class ParserTest extends FunSuite{
     }
   }
 
-  test("parses stuff correctly"){
+  test("parses literals correctly"){
     val literal = LiteralBSON("""{hello: "world", "$get": 1.13, doc: {f: 2}, float: -1}""")
     val hand = BSONDocument(
       "hello" -> BSONString("world"),
@@ -25,5 +25,12 @@ class ParserTest extends FunSuite{
       "float" -> BSONInteger(-1)
     )
     assert(mapped(literal) === mapped(hand))
+  }
+
+  test("single interpolated value"){
+    val v = BSONString("hai")
+    val lite = LiteralBSON("""{value:$v}""")
+    val hand = BSONDocument("value" -> v)
+    assert(mapped(lite) === mapped(hand))
   }
 }
