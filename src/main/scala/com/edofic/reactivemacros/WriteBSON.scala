@@ -44,6 +44,8 @@ trait WriteBSONimplicits {
   implicit val objectIDWriter = new WriteBSON[BSONObjectID] {
     def write(value: BSONObjectID): BSONValue = value
   }
+
+  implicit def any2BSONValue[A](a: A)(implicit writer: WriteBSON[A]) = writer write a
 }
 
 object WriteBSON extends WriteBSONimplicits {

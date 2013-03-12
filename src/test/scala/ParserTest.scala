@@ -1,4 +1,4 @@
-import com.edofic.reactivemacros.LiteralBSON
+import com.edofic.reactivemacros._
 import org.scalatest.FunSuite
 import reactivemongo.bson._
 
@@ -31,6 +31,14 @@ class ParserTest extends FunSuite{
     val v = BSONString("hai")
     val lite = LiteralBSON("""{value:$v}""")
     val hand = BSONDocument("value" -> v)
+    assert(mapped(lite) === mapped(hand))
+  }
+
+  test("implicit conversions"){
+    import WriteBSON.any2BSONValue
+    val v = "hai"
+    val lite = LiteralBSON("""{value:$v}""")
+    val hand = BSONDocument("value" -> BSONString(v))
     assert(mapped(lite) === mapped(hand))
   }
 }

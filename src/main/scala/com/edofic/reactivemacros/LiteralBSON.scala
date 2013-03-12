@@ -25,7 +25,9 @@ object LiteralBSON  {
     def nakedString = stringLiteral ^^ (s => s.substring(1,s.length-1))
 
     def dollar: Parser[c.Expr[BSONValue]] = """\$[a-zA-Z_]\w*""".r ^^ {
-      id => c.Expr[BSONValue](Ident(id.substring(1)))
+      id => c.Expr[BSONValue](
+        Typed(Ident(id.substring(1)), btype("BSONValue"))
+      )
     }
 
     def key: Parser[c.Expr[String]] = (ident | nakedString) ^^ {
@@ -79,6 +81,8 @@ object LiteralBSON  {
     }
 
     private def bpath(name: String) = Select(Select(Ident(newTermName("reactivemongo")), "bson"), name)
+
+    private def btype(name: String) = Select(Select(Ident("reactivemongo"), "bson"), newTypeName(name))
   }
 }
 
