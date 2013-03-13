@@ -24,9 +24,15 @@ object LiteralBSON  {
 
     def nakedString = stringLiteral ^^ (s => s.substring(1,s.length-1))
 
-    def dollar: Parser[c.Expr[BSONValue]] = """\$[a-zA-Z_]\w*""".r ^^ {
+    def variable: Parser[c.Expr[BSONValue]] = """\$[a-zA-Z_]\w*""".r ^^ {
       id => c.Expr[BSONValue](
         Typed(Ident(id.substring(1)), btype("BSONValue"))
+      )
+    }
+
+    def expression: Parser[c.Expr[BSONValue]] = """\$\$.*?\$\$""".r ^^ {
+      exp => c.Expr[BSONValue](
+        Typed(c.parse(exp.substring(2, exp.length -2)), btype("BSONValue"))
       )
     }
 
@@ -57,7 +63,7 @@ object LiteralBSON  {
     }
 
     def value: Parser[c.Expr[BSONValue]] =
-      number | string | boolean | document | dollar
+      number | string | boolean | document | expression | variable
 
     def keyVal: Parser[c.Expr[(String, BSONValue)]] = key ~ ":" ~ value ^^ {
       case key ~ _ ~ value => reify{ (key.splice, value.splice) }

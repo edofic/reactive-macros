@@ -41,4 +41,21 @@ class ParserTest extends FunSuite{
     val hand = BSONDocument("value" -> BSONString(v))
     assert(mapped(lite) === mapped(hand))
   }
+
+  test("expression"){
+    import WriteBSON.any2BSONValue
+    val lite = LiteralBSON("""{value: $$1+1$$}""")
+    val hand = BSONDocument("value" -> BSONInteger(1+1))
+    assert(mapped(lite) === mapped(hand))
+  }
+
+  test("expression and a literal"){
+    import WriteBSON.any2BSONValue
+    val lite = LiteralBSON("""{value: $$1+1$$, name: "foo"}""")
+    val hand = BSONDocument(
+      "value" -> BSONInteger(1+1),
+      "name" -> BSONString("foo")
+    )
+    assert(mapped(lite) === mapped(hand))
+  }
 }
