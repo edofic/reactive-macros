@@ -16,6 +16,10 @@ class ParserTest extends FunSuite{
     }
   }
 
+  def compare(literal: BSONDocument, hand: AppendableBSONDocument) {
+    assert(mapped(literal) === mapped(hand))
+  }
+
   test("parses literals correctly"){
     val literal = LiteralBSON("""{hello: "world", "$get": 1.13, doc: {f: 2}, float: -1}""")
     val hand = BSONDocument(
@@ -24,14 +28,13 @@ class ParserTest extends FunSuite{
       "doc" -> BSONDocument("f" -> BSONInteger(2)),
       "float" -> BSONInteger(-1)
     )
-    assert(mapped(literal) === mapped(hand))
   }
 
   test("single interpolated value"){
     val v = BSONString("hai")
     val lite = LiteralBSON("""{value:$v}""")
     val hand = BSONDocument("value" -> v)
-    assert(mapped(lite) === mapped(hand))
+    compare(lite, hand)
   }
 
   test("implicit conversions"){
@@ -39,14 +42,14 @@ class ParserTest extends FunSuite{
     val v = "hai"
     val lite = LiteralBSON("""{value:$v}""")
     val hand = BSONDocument("value" -> BSONString(v))
-    assert(mapped(lite) === mapped(hand))
+    compare(lite, hand)
   }
 
   test("expression"){
     import WriteBSON.any2BSONValue
     val lite = LiteralBSON("""{value: $$1+1$$}""")
     val hand = BSONDocument("value" -> BSONInteger(1+1))
-    assert(mapped(lite) === mapped(hand))
+    compare(lite, hand)
   }
 
   test("expression and a literal"){
@@ -56,6 +59,6 @@ class ParserTest extends FunSuite{
       "value" -> BSONInteger(1+1),
       "name" -> BSONString("foo")
     )
-    assert(mapped(lite) === mapped(hand))
+    compare(lite, hand)
   }
 }
