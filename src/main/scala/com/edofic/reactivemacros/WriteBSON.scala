@@ -1,5 +1,6 @@
 package com.edofic.reactivemacros
 
+import scala.language.implicitConversions
 import reactivemongo.bson._
 import handlers.BSONWriter
 import language.experimental.macros
