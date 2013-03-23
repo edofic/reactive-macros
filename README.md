@@ -2,7 +2,7 @@
 
 macros for serialization and deserialization of case classes into reactive mongo BSON
 
-**WARNING** This is currently very experimental. You've been warned. Not let's have some fun.
+**NOTE** this is useful for ReactiveMongo 0.8, 0.9(master) has different API and already contains these maros
 
 The idea is to fully automate creation of BSONReader and BSONWriter for case classes. Since writing this code is tedious and repetitive the only logical conclusion is to have a computer write it. Also relevent: DRY principle.
 
@@ -106,3 +106,4 @@ And you can also include arbitrary scala expressions(alsmost - your code may not
     LiteralBSON("""{value: $$ 1+1 $$}""")
     //"desugars" into
     BSONDocument("value" -> BSONInteger(1+1))
+
